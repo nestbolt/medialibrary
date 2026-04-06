@@ -1,10 +1,9 @@
 export {
-  MEDIA_EVENTS,
-  MediaAddedEvent,
-  MediaUpdatedEvent,
-  MediaDeletedEvent,
   CollectionClearedEvent,
-  ConversionWillStartEvent,
   ConversionCompletedEvent,
   ConversionFailedEvent,
+  ConversionWillStartEvent,
+  MEDIA_EVENTS,
+  MediaAddedEvent,
+  MediaDeletedEvent,
 } from "./media.events";

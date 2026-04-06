@@ -104,6 +104,25 @@ describe("file helpers", () => {
     it("should format gigabytes", () => {
       expect(formatBytes(1024 * 1024 * 1024)).toBe("1.00 GB");
     });
+
+    it("should format terabytes", () => {
+      expect(formatBytes(1024 * 1024 * 1024 * 1024)).toBe("1.00 TB");
+    });
+
+    it("should clamp to TB for values exceeding TB range", () => {
+      // 1 PB = 1024 TB — should still display in TB, not crash with undefined
+      const petabyte = 1024 * 1024 * 1024 * 1024 * 1024;
+      const result = formatBytes(petabyte);
+      expect(result).toContain("TB");
+      expect(result).not.toContain("undefined");
+    });
+
+    it("should handle very large values without crashing", () => {
+      // 10 PB
+      const huge = 10 * 1024 * 1024 * 1024 * 1024 * 1024;
+      const result = formatBytes(huge);
+      expect(result).toContain("TB");
+    });
   });
 
   describe("getFileType", () => {

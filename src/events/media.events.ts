@@ -2,7 +2,6 @@ import type { MediaEntity } from "../entities/media.entity";
 
 export const MEDIA_EVENTS = {
   MEDIA_ADDED: "media.added",
-  MEDIA_UPDATED: "media.updated",
   MEDIA_DELETED: "media.deleted",
   COLLECTION_CLEARED: "media.collection-cleared",
   CONVERSION_WILL_START: "media.conversion-will-start",
@@ -11,12 +10,6 @@ export const MEDIA_EVENTS = {
 } as const;
 
 export interface MediaAddedEvent {
-  media: MediaEntity;
-  modelType: string;
-  modelId: string;
-}
-
-export interface MediaUpdatedEvent {
   media: MediaEntity;
   modelType: string;
   modelId: string;

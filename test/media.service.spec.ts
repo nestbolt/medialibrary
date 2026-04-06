@@ -267,4 +267,95 @@ describe("MediaService", () => {
     expect(media).toBeDefined();
     expect(Number(media.size)).toBe(original.length);
   });
+
+  it("should throw when attachMedia is called without forModel()", async () => {
+    await expect(
+      service
+        .addMediaFromBuffer(Buffer.from("test"), "file.txt")
+        .toMediaCollection(),
+    ).rejects.toThrow("FileAdder must have modelType and modelId set via forModel()");
+  });
+
+  it("should clear static instance on module destroy", async () => {
+    expect(MediaService.getInstance()).toBe(service);
+    await module.close();
+    expect(MediaService.getInstance()).toBeNull();
+    // Recreate module for afterEach cleanup
+    module = await Test.createTestingModule({
+      imports: [
+        TypeOrmModule.forRoot({
+          type: "better-sqlite3",
+          database: ":memory:",
+          entities: [MediaEntity],
+          synchronize: true,
+        }),
+        MediaModule.forRoot({
+          defaultDisk: "local",
+          disks: {
+            local: { driver: "local", root: tmpDir, urlBase: "/media" },
+          },
+        }),
+      ],
+    }).compile();
+    await module.init();
+    service = module.get<MediaService>(MediaService);
+  });
+
+  it("should set order atomically via transaction", async () => {
+    const m1 = await service
+      .addMediaFromBuffer(Buffer.from("1"), "first.txt")
+      .forModel("Post", "order-test")
+      .toMediaCollection();
+
+    const m2 = await service
+      .addMediaFromBuffer(Buffer.from("2"), "second.txt")
+      .forModel("Post", "order-test")
+      .toMediaCollection();
+
+    const m3 = await service
+      .addMediaFromBuffer(Buffer.from("3"), "third.txt")
+      .forModel("Post", "order-test")
+      .toMediaCollection();
+
+    // Reverse the order
+    await service.setOrder([m3.id, m2.id, m1.id]);
+
+    const all = await service.getMedia("Post", "order-test");
+    expect(all[0].id).toBe(m3.id);
+    expect(all[0].orderColumn).toBe(0);
+    expect(all[1].id).toBe(m2.id);
+    expect(all[1].orderColumn).toBe(1);
+    expect(all[2].id).toBe(m1.id);
+    expect(all[2].orderColumn).toBe(2);
+  });
+
+  it("should delete DB record before files (deleteMedia)", async () => {
+    const media = await service
+      .addMediaFromBuffer(Buffer.from("test"), "file.txt")
+      .forModel("Post", "del-order")
+      .toMediaCollection();
+
+    const mediaId = media.id;
+    await service.deleteMedia(mediaId);
+
+    // DB record should be gone
+    const found = await service.getFirstMedia("Post", "del-order");
+    expect(found).toBeNull();
+  });
+
+  it("should delete DB records before files (deleteAllMedia)", async () => {
+    await service
+      .addMediaFromBuffer(Buffer.from("a"), "a.txt")
+      .forModel("Post", "del-all")
+      .toMediaCollection();
+
+    await service
+      .addMediaFromBuffer(Buffer.from("b"), "b.txt")
+      .forModel("Post", "del-all")
+      .toMediaCollection();
+
+    await service.deleteAllMedia("Post", "del-all");
+
+    expect(await service.hasMedia("Post", "del-all")).toBe(false);
+  });
 });

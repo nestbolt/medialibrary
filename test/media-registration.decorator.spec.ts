@@ -4,6 +4,7 @@ import { HasMedia } from "../src/decorators/has-media.decorator";
 import {
   RegisterMediaCollections,
   RegisterMediaConversions,
+  clearMediaRegistries,
 } from "../src/decorators/media-registration.decorator";
 import {
   MEDIA_COLLECTIONS_METADATA_KEY,
@@ -126,5 +127,45 @@ describe("RegisterMediaConversions", () => {
     class First {}
 
     expect((globalThis as any).__nestbolt_media_conversions).toBeInstanceOf(Map);
+  });
+});
+
+describe("clearMediaRegistries", () => {
+  beforeEach(() => {
+    (globalThis as any).__nestbolt_media_collections = undefined;
+    (globalThis as any).__nestbolt_media_conversions = undefined;
+  });
+
+  it("should clear both collections and conversions registries", () => {
+    @HasMedia({ modelType: "ClearTest" })
+    @RegisterMediaCollections((addCollection) => {
+      addCollection("images");
+    })
+    @RegisterMediaConversions((addConversion) => {
+      addConversion("thumb").resize(50);
+    })
+    class ClearTest {}
+
+    const colRegistry = (globalThis as any).__nestbolt_media_collections as Map<string, any>;
+    const convRegistry = (globalThis as any).__nestbolt_media_conversions as Map<string, any>;
+    expect(colRegistry.size).toBeGreaterThan(0);
+    expect(convRegistry.size).toBeGreaterThan(0);
+
+    clearMediaRegistries();
+
+    expect(colRegistry.size).toBe(0);
+    expect(convRegistry.size).toBe(0);
+  });
+
+  it("should not throw when registries do not exist", () => {
+    (globalThis as any).__nestbolt_media_collections = undefined;
+    (globalThis as any).__nestbolt_media_conversions = undefined;
+    expect(() => clearMediaRegistries()).not.toThrow();
+  });
+
+  it("should not throw when registries are empty", () => {
+    (globalThis as any).__nestbolt_media_collections = new Map();
+    (globalThis as any).__nestbolt_media_conversions = new Map();
+    expect(() => clearMediaRegistries()).not.toThrow();
   });
 });

@@ -1,49 +1,54 @@
-import { Inject, Injectable, Logger, OnModuleInit, Optional } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  Optional,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import * as fs from "fs";
-import * as path from "path";
+import * as fsp from "fs/promises";
 import * as http from "http";
 import * as https from "https";
-import { Readable } from "stream";
+import * as path from "path";
+import { EntityManager, Repository } from "typeorm";
 import { MediaEntity } from "./entities/media.entity";
-import { DiskManager } from "./storage/disk-manager";
-import { FileManipulator } from "./file-manipulator";
-import { FileAdder, FileSource } from "./file-adder";
-import { ConversionBuilder } from "./conversion-builder";
-import { MEDIA_OPTIONS, PATH_GENERATOR, URL_GENERATOR, FILE_NAMER } from "./media.constants";
-import {
-  MEDIA_COLLECTIONS_METADATA_KEY,
-  MEDIA_CONVERSIONS_METADATA_KEY,
-  DEFAULT_COLLECTION_NAME,
-  DEFAULT_MAX_FILE_SIZE,
-} from "./media.constants";
 import { MEDIA_EVENTS } from "./events";
-import type { MediaModuleOptions } from "./interfaces/media-options.interface";
-import type { PathGenerator } from "./interfaces/path-generator.interface";
-import type { UrlGenerator } from "./interfaces/url-generator.interface";
-import type { FileNamer } from "./interfaces/file-namer.interface";
-import type { ConversionConfig } from "./interfaces/conversion.interface";
-import type { MediaCollectionConfig } from "./interfaces/media-collection.interface";
-import type { MediaCollectionBuilder } from "./media-collection-builder";
 import {
   FileDoesNotExistException,
   FileIsTooBigException,
   FileUnacceptableException,
 } from "./exceptions";
+import { FileAdder } from "./file-adder";
+import { FileManipulator } from "./file-manipulator";
 import {
+  sanitizeFileName as defaultSanitize,
   detectMimeType,
   generateUuid,
   getBaseName,
-  sanitizeFileName as defaultSanitize,
 } from "./helpers";
+import type { ConversionConfig } from "./interfaces/conversion.interface";
+import type { FileNamer } from "./interfaces/file-namer.interface";
+import type { MediaCollectionConfig } from "./interfaces/media-collection.interface";
+import type { MediaModuleOptions } from "./interfaces/media-options.interface";
+import type { PathGenerator } from "./interfaces/path-generator.interface";
+import type { UrlGenerator } from "./interfaces/url-generator.interface";
+import {
+  DEFAULT_COLLECTION_NAME,
+  DEFAULT_MAX_FILE_SIZE,
+  FILE_NAMER,
+  MEDIA_OPTIONS,
+  PATH_GENERATOR,
+  URL_GENERATOR,
+} from "./media.constants";
+import { DiskManager } from "./storage/disk-manager";
 
 interface EventEmitterLike {
   emit(event: string, ...args: any[]): boolean;
 }
 
 @Injectable()
-export class MediaService implements OnModuleInit {
+export class MediaService implements OnModuleInit, OnModuleDestroy {
   private static instance: MediaService | null = null;
   private readonly logger = new Logger(MediaService.name);
 
@@ -60,6 +65,12 @@ export class MediaService implements OnModuleInit {
 
   onModuleInit(): void {
     MediaService.instance = this;
+  }
+
+  onModuleDestroy(): void {
+    if (MediaService.instance === this) {
+      MediaService.instance = null;
+    }
   }
 
   static getInstance(): MediaService | null {
@@ -138,11 +149,7 @@ export class MediaService implements OnModuleInit {
     });
   }
 
-  async hasMedia(
-    modelType: string,
-    modelId: string,
-    collectionName?: string,
-  ): Promise<boolean> {
+  async hasMedia(modelType: string, modelId: string, collectionName?: string): Promise<boolean> {
     const where: Record<string, any> = { modelType, modelId };
     if (collectionName) {
       where.collectionName = collectionName;
@@ -200,41 +207,41 @@ export class MediaService implements OnModuleInit {
   async deleteAllMedia(modelType: string, modelId: string): Promise<void> {
     const mediaItems = await this.getMedia(modelType, modelId);
 
+    await this.mediaRepo.delete({ modelType, modelId });
+
     for (const media of mediaItems) {
       await this.deleteMediaFiles(media);
     }
-
-    await this.mediaRepo.delete({ modelType, modelId });
   }
 
   async deleteMedia(mediaId: string): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
     if (!media) return;
 
-    await this.deleteMediaFiles(media);
+    const { modelType, modelId } = media;
     await this.mediaRepo.remove(media);
+    await this.deleteMediaFiles(media);
 
     this.emit(MEDIA_EVENTS.MEDIA_DELETED, {
       media,
-      modelType: media.modelType,
-      modelId: media.modelId,
+      modelType,
+      modelId,
     });
   }
 
   // --- Ordering ---
 
   async setOrder(mediaIds: string[]): Promise<void> {
-    for (let i = 0; i < mediaIds.length; i++) {
-      await this.mediaRepo.update(mediaIds[i], { orderColumn: i });
-    }
+    await this.mediaRepo.manager.transaction(async (transactionalManager) => {
+      for (let i = 0; i < mediaIds.length; i++) {
+        await transactionalManager.update(MediaEntity, mediaIds[i], { orderColumn: i });
+      }
+    });
   }
 
   // --- Conversions ---
 
-  async regenerateConversions(
-    media: MediaEntity,
-    conversionNames?: string[],
-  ): Promise<void> {
+  async regenerateConversions(media: MediaEntity, conversionNames?: string[]): Promise<void> {
     const conversions = this.getConversionsForEntity(media.modelType);
     const applicableConversions = conversions.filter((c) => {
       if (conversionNames && !conversionNames.includes(c.name)) return false;
@@ -268,8 +275,11 @@ export class MediaService implements OnModuleInit {
       throw new FileIsTooBigException(fileSize, maxFileSize);
     }
 
-    const modelType = fileAdder.modelType!;
-    const modelId = fileAdder.modelId!;
+    if (!fileAdder.modelType || !fileAdder.modelId) {
+      throw new Error("FileAdder must have modelType and modelId set via forModel()");
+    }
+    const modelType = fileAdder.modelType;
+    const modelId = fileAdder.modelId;
     const collectionName = fileAdder.collectionName;
 
     const collectionConfig = this.getCollectionConfig(modelType, collectionName);
@@ -277,57 +287,67 @@ export class MediaService implements OnModuleInit {
       this.validateFileForCollection(collectionConfig, sanitized, mimeType, fileSize);
     }
 
-    if (collectionConfig?.singleFile) {
-      await this.clearMediaCollection(modelType, modelId, collectionName);
-    } else if (collectionConfig?.collectionSizeLimit) {
-      await this.enforceCollectionSizeLimit(
+    const diskName =
+      fileAdder.diskName ?? collectionConfig?.diskName ?? this.options.defaultDisk ?? "local";
+    const conversionsDiskName =
+      fileAdder.conversionsDiskName ?? collectionConfig?.conversionsDiskName;
+
+    return this.mediaRepo.manager.transaction(async (transactionalManager) => {
+      if (collectionConfig?.singleFile) {
+        await this.clearMediaCollectionInTransaction(
+          transactionalManager,
+          modelType,
+          modelId,
+          collectionName,
+        );
+      } else if (collectionConfig?.collectionSizeLimit) {
+        await this.enforceCollectionSizeLimitInTransaction(
+          transactionalManager,
+          modelType,
+          modelId,
+          collectionName,
+          collectionConfig.collectionSizeLimit,
+        );
+      }
+
+      const media = transactionalManager.create(MediaEntity, {
         modelType,
         modelId,
+        uuid: generateUuid(),
         collectionName,
-        collectionConfig.collectionSizeLimit,
-      );
-    }
+        name: fileAdder.mediaName ?? getBaseName(sanitized),
+        fileName: sanitized,
+        mimeType,
+        disk: diskName,
+        conversionsDisk: conversionsDiskName ?? null,
+        size: fileSize,
+        manipulations: fileAdder.manipulations,
+        customProperties: fileAdder.customProperties,
+        generatedConversions: {},
+        responsiveImages: {},
+        orderColumn: fileAdder.order ?? null,
+      });
 
-    const diskName = fileAdder.diskName ?? collectionConfig?.diskName ?? this.options.defaultDisk ?? "local";
-    const conversionsDiskName = fileAdder.conversionsDiskName ?? collectionConfig?.conversionsDiskName;
+      const savedMedia = await transactionalManager.save(media);
 
-    const media = this.mediaRepo.create({
-      modelType,
-      modelId,
-      uuid: generateUuid(),
-      collectionName,
-      name: fileAdder.mediaName ?? getBaseName(sanitized),
-      fileName: sanitized,
-      mimeType,
-      disk: diskName,
-      conversionsDisk: conversionsDiskName ?? null,
-      size: fileSize,
-      manipulations: fileAdder.manipulations,
-      customProperties: fileAdder.customProperties,
-      generatedConversions: {},
-      responsiveImages: {},
-      orderColumn: fileAdder.order ?? null,
+      const filePath = this.urlGenerator.getPath(savedMedia);
+      const driver = this.diskManager.disk(diskName);
+      await driver.put(filePath, buffer);
+
+      this.emit(MEDIA_EVENTS.MEDIA_ADDED, {
+        media: savedMedia,
+        modelType,
+        modelId,
+      });
+
+      const conversions = this.getApplicableConversions(modelType, collectionName);
+      if (conversions.length > 0 && this.fileManipulator.isImage(mimeType)) {
+        await this.performConversions(savedMedia, buffer, conversions);
+        await transactionalManager.save(savedMedia);
+      }
+
+      return savedMedia;
     });
-
-    const savedMedia = await this.mediaRepo.save(media);
-
-    const filePath = this.urlGenerator.getPath(savedMedia);
-    const driver = this.diskManager.disk(diskName);
-    await driver.put(filePath, buffer);
-
-    this.emit(MEDIA_EVENTS.MEDIA_ADDED, {
-      media: savedMedia,
-      modelType,
-      modelId,
-    });
-
-    const conversions = this.getApplicableConversions(modelType, collectionName);
-    if (conversions.length > 0 && this.fileManipulator.isImage(mimeType)) {
-      await this.performConversions(savedMedia, buffer, conversions);
-      await this.mediaRepo.save(savedMedia);
-    }
-
-    return savedMedia;
   }
 
   // --- Private helpers ---
@@ -339,10 +359,12 @@ export class MediaService implements OnModuleInit {
 
     switch (source.type) {
       case "path": {
-        if (!fs.existsSync(source.path)) {
+        try {
+          await fsp.access(source.path);
+        } catch {
           throw new FileDoesNotExistException(source.path);
         }
-        const buffer = fs.readFileSync(source.path);
+        const buffer = await fsp.readFile(source.path);
         const resolvedFileName = fileAdder.fileName ?? path.basename(source.path);
         return { buffer, resolvedFileName };
       }
@@ -400,10 +422,49 @@ export class MediaService implements OnModuleInit {
     }
   }
 
-  private getApplicableConversions(
+  private async clearMediaCollectionInTransaction(
+    manager: EntityManager,
     modelType: string,
+    modelId: string,
     collectionName: string,
-  ): ConversionConfig[] {
+  ): Promise<void> {
+    const collection = collectionName ?? DEFAULT_COLLECTION_NAME;
+    const mediaItems = await manager.find(MediaEntity, {
+      where: { modelType, modelId, collectionName: collection },
+    });
+
+    for (const media of mediaItems) {
+      await this.deleteMediaFiles(media);
+    }
+
+    await manager.delete(MediaEntity, {
+      modelType,
+      modelId,
+      collectionName: collection,
+    });
+  }
+
+  private async enforceCollectionSizeLimitInTransaction(
+    manager: EntityManager,
+    modelType: string,
+    modelId: string,
+    collectionName: string,
+    limit: number,
+  ): Promise<void> {
+    const existing = await manager.find(MediaEntity, {
+      where: { modelType, modelId, collectionName },
+      order: { orderColumn: "ASC", createdAt: "ASC" },
+    });
+    if (existing.length >= limit) {
+      const toRemove = existing.slice(0, existing.length - limit + 1);
+      for (const media of toRemove) {
+        await this.deleteMediaFiles(media);
+        await manager.remove(media);
+      }
+    }
+  }
+
+  private getApplicableConversions(modelType: string, collectionName: string): ConversionConfig[] {
     const conversions = this.getConversionsForEntity(modelType);
     return conversions.filter((c) => {
       if (c.performOnCollections.length === 0) return true;
@@ -518,25 +579,47 @@ export class MediaService implements OnModuleInit {
     }
   }
 
-  private downloadFile(url: string): Promise<{ buffer: Buffer; fileName: string }> {
+  private downloadFile(
+    url: string,
+    redirectCount = 0,
+  ): Promise<{ buffer: Buffer; fileName: string }> {
+    const MAX_REDIRECTS = 5;
+
     return new Promise((resolve, reject) => {
       const lib = url.startsWith("https") ? https : http;
-      lib.get(url, (response) => {
-        if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          this.downloadFile(response.headers.location).then(resolve).catch(reject);
-          return;
-        }
+      lib
+        .get(url, (response) => {
+          const statusCode = response.statusCode ?? 0;
 
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk: Buffer) => chunks.push(chunk));
-        response.on("end", () => {
-          const buffer = Buffer.concat(chunks);
-          const urlPath = new URL(url).pathname;
-          const fileName = path.basename(urlPath) || "downloaded-file";
-          resolve({ buffer, fileName });
-        });
-        response.on("error", reject);
-      }).on("error", reject);
+          if (statusCode >= 300 && statusCode < 400 && response.headers.location) {
+            if (redirectCount >= MAX_REDIRECTS) {
+              reject(
+                new Error(`Too many redirects (max ${MAX_REDIRECTS}) when downloading: ${url}`),
+              );
+              return;
+            }
+            this.downloadFile(response.headers.location, redirectCount + 1)
+              .then(resolve)
+              .catch(reject);
+            return;
+          }
+
+          if (statusCode < 200 || statusCode >= 300) {
+            reject(new Error(`Failed to download file from "${url}": HTTP ${statusCode}`));
+            return;
+          }
+
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          response.on("end", () => {
+            const buffer = Buffer.concat(chunks);
+            const urlPath = new URL(url).pathname;
+            const fileName = path.basename(urlPath) || "downloaded-file";
+            resolve({ buffer, fileName });
+          });
+          response.on("error", reject);
+        })
+        .on("error", reject);
     });
   }
 }

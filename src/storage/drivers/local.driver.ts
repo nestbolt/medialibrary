@@ -1,10 +1,11 @@
 import * as fs from "fs";
+import * as fsp from "fs/promises";
 import * as path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
+import { detectMimeType } from "../../helpers";
 import type { StorageDriver } from "../../interfaces/storage-driver.interface";
 import type { LocalDiskConfig } from "../storage.types";
-import { detectMimeType } from "../../helpers";
 
 export class LocalDriver implements StorageDriver {
   private readonly root: string;
@@ -16,29 +17,35 @@ export class LocalDriver implements StorageDriver {
   }
 
   private resolve(filePath: string): string {
-    return path.resolve(this.root, filePath);
+    const resolved = path.resolve(this.root, filePath);
+    if (!resolved.startsWith(this.root)) {
+      throw new Error(
+        `Path traversal detected: "${filePath}" resolves outside the root directory.`,
+      );
+    }
+    return resolved;
   }
 
-  private ensureDirectory(filePath: string): void {
+  private async ensureDirectory(filePath: string): Promise<void> {
     const dir = path.dirname(filePath);
-    fs.mkdirSync(dir, { recursive: true });
+    await fsp.mkdir(dir, { recursive: true });
   }
 
   async put(filePath: string, data: Buffer): Promise<void> {
     const fullPath = this.resolve(filePath);
-    this.ensureDirectory(fullPath);
-    fs.writeFileSync(fullPath, data);
+    await this.ensureDirectory(fullPath);
+    await fsp.writeFile(fullPath, data);
   }
 
   async putStream(filePath: string, stream: NodeJS.ReadableStream): Promise<void> {
     const fullPath = this.resolve(filePath);
-    this.ensureDirectory(fullPath);
+    await this.ensureDirectory(fullPath);
     const writeStream = fs.createWriteStream(fullPath);
     await pipeline(stream as Readable, writeStream);
   }
 
   async get(filePath: string): Promise<Buffer> {
-    return fs.readFileSync(this.resolve(filePath));
+    return fsp.readFile(this.resolve(filePath));
   }
 
   getStream(filePath: string): NodeJS.ReadableStream {
@@ -47,36 +54,45 @@ export class LocalDriver implements StorageDriver {
 
   async delete(filePath: string): Promise<void> {
     const fullPath = this.resolve(filePath);
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
+    try {
+      await fsp.unlink(fullPath);
+    } catch (err: any) {
+      if (err.code !== "ENOENT") throw err;
     }
   }
 
   async deleteDirectory(dirPath: string): Promise<void> {
     const fullPath = this.resolve(dirPath);
-    if (fs.existsSync(fullPath)) {
-      fs.rmSync(fullPath, { recursive: true, force: true });
+    try {
+      await fsp.rm(fullPath, { recursive: true, force: true });
+    } catch (err: any) {
+      if (err.code !== "ENOENT") throw err;
     }
   }
 
   async exists(filePath: string): Promise<boolean> {
-    return fs.existsSync(this.resolve(filePath));
+    try {
+      await fsp.access(this.resolve(filePath));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async copy(source: string, destination: string): Promise<void> {
     const destPath = this.resolve(destination);
-    this.ensureDirectory(destPath);
-    fs.copyFileSync(this.resolve(source), destPath);
+    await this.ensureDirectory(destPath);
+    await fsp.copyFile(this.resolve(source), destPath);
   }
 
   async move(source: string, destination: string): Promise<void> {
     const destPath = this.resolve(destination);
-    this.ensureDirectory(destPath);
-    fs.renameSync(this.resolve(source), destPath);
+    await this.ensureDirectory(destPath);
+    await fsp.rename(this.resolve(source), destPath);
   }
 
   async size(filePath: string): Promise<number> {
-    const stats = fs.statSync(this.resolve(filePath));
+    const stats = await fsp.stat(this.resolve(filePath));
     return stats.size;
   }
 

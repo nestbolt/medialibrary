@@ -1,6 +1,6 @@
 import { lookup, extension as mimeExtension } from "mime-types";
-import { v4 as uuidv4 } from "uuid";
 import * as path from "path";
+import { v4 as uuidv4 } from "uuid";
 
 export function generateUuid(): string {
   return uuidv4();
@@ -33,7 +33,7 @@ export function getBaseName(fileName: string): string {
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / Math.pow(1024, i);
   return `${value.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
 }
@@ -45,11 +45,7 @@ export function getFileType(mimeType: string): string {
   if (mimeType.startsWith("audio/")) return "audio";
   if (mimeType === "application/pdf") return "pdf";
   if (mimeType.startsWith("text/")) return "document";
-  if (
-    mimeType.includes("spreadsheet") ||
-    mimeType.includes("excel") ||
-    mimeType === "text/csv"
-  ) {
+  if (mimeType.includes("spreadsheet") || mimeType.includes("excel") || mimeType === "text/csv") {
     return "spreadsheet";
   }
   if (mimeType.includes("presentation") || mimeType.includes("powerpoint")) {

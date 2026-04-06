@@ -1,10 +1,10 @@
 import {
-  Entity,
-  PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  UpdateDateColumn,
+  Entity,
   Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
 } from "typeorm";
 import { formatBytes, getExtension, getFileType } from "../helpers";
 
@@ -41,7 +41,14 @@ export class MediaEntity {
   @Column({ name: "conversions_disk", type: "varchar", length: 255, nullable: true })
   conversionsDisk!: string | null;
 
-  @Column({ name: "size", type: "bigint" })
+  @Column({
+    name: "size",
+    type: "bigint",
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string | number) => (typeof value === "string" ? parseInt(value, 10) : value),
+    },
+  })
   size!: number;
 
   @Column({ name: "manipulations", type: "simple-json", default: "{}" })

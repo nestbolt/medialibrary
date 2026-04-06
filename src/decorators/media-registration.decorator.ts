@@ -1,13 +1,26 @@
 import "reflect-metadata";
+import { ConversionBuilder } from "../conversion-builder";
+import type { ConversionConfig } from "../interfaces/conversion.interface";
+import type { MediaCollectionConfig } from "../interfaces/media-collection.interface";
+import { MediaCollectionBuilder } from "../media-collection-builder";
 import {
   HAS_MEDIA_METADATA_KEY,
   MEDIA_COLLECTIONS_METADATA_KEY,
   MEDIA_CONVERSIONS_METADATA_KEY,
 } from "../media.constants";
-import { ConversionBuilder } from "../conversion-builder";
-import { MediaCollectionBuilder } from "../media-collection-builder";
-import type { ConversionConfig } from "../interfaces/conversion.interface";
-import type { MediaCollectionConfig } from "../interfaces/media-collection.interface";
+
+/**
+ * Clear all global media registries. Useful in tests to prevent state leakage.
+ */
+export function clearMediaRegistries(): void {
+  const g = globalThis as any;
+  if (g.__nestbolt_media_collections) {
+    g.__nestbolt_media_collections.clear();
+  }
+  if (g.__nestbolt_media_conversions) {
+    g.__nestbolt_media_conversions.clear();
+  }
+}
 
 export function RegisterMediaCollections(
   registrar: (addCollection: (name: string) => MediaCollectionBuilder) => void,
@@ -17,13 +30,13 @@ export function RegisterMediaCollections(
     const modelType = meta?.modelType ?? target.name;
 
     const factory = (): MediaCollectionConfig[] => {
-      const configs: MediaCollectionConfig[] = [];
+      const builders: MediaCollectionBuilder[] = [];
       registrar((name: string) => {
         const builder = new MediaCollectionBuilder(name);
-        configs.push(builder as any);
+        builders.push(builder);
         return builder;
       });
-      return configs.map((c) => (c instanceof MediaCollectionBuilder ? (c as any).build() : c));
+      return builders.map((b) => (b as any).build());
     };
 
     Reflect.defineMetadata(MEDIA_COLLECTIONS_METADATA_KEY, factory, target);
@@ -46,13 +59,13 @@ export function RegisterMediaConversions(
     const modelType = meta?.modelType ?? target.name;
 
     const factory = (): ConversionConfig[] => {
-      const configs: ConversionConfig[] = [];
+      const builders: ConversionBuilder[] = [];
       registrar((name: string) => {
         const builder = new ConversionBuilder(name);
-        configs.push(builder as any);
+        builders.push(builder);
         return builder;
       });
-      return configs.map((c) => (c instanceof ConversionBuilder ? (c as any).build() : c));
+      return builders.map((b) => (b as any).build());
     };
 
     Reflect.defineMetadata(MEDIA_CONVERSIONS_METADATA_KEY, factory, target);

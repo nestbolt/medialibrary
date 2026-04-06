@@ -3,12 +3,12 @@ export { MediaModule } from "./media.module";
 
 // Constants
 export {
+  DEFAULT_COLLECTION_NAME,
+  DEFAULT_MAX_FILE_SIZE,
+  FILE_NAMER,
   MEDIA_OPTIONS,
   PATH_GENERATOR,
   URL_GENERATOR,
-  FILE_NAMER,
-  DEFAULT_MAX_FILE_SIZE,
-  DEFAULT_COLLECTION_NAME,
 } from "./media.constants";
 
 // Service
@@ -18,17 +18,22 @@ export { MediaService } from "./media.service";
 export { MediaEntity } from "./entities";
 
 // Builders
-export { FileAdder } from "./file-adder";
-export type { FileSource, FileAdderAttacher } from "./file-adder";
 export { ConversionBuilder } from "./conversion-builder";
+export { FileAdder } from "./file-adder";
+export type { FileAdderAttacher, FileSource } from "./file-adder";
 export { MediaCollectionBuilder } from "./media-collection-builder";
 
 // File Manipulator
 export { FileManipulator } from "./file-manipulator";
 
 // Decorators
-export { HasMedia, HasMediaOptions } from "./decorators";
-export { RegisterMediaCollections, RegisterMediaConversions } from "./decorators";
+export {
+  clearMediaRegistries,
+  HasMedia,
+  HasMediaOptions,
+  RegisterMediaCollections,
+  RegisterMediaConversions,
+} from "./decorators";
 
 // Mixins
 export { HasMediaMixin } from "./mixins";
@@ -36,59 +41,55 @@ export type { HasMediaEntity } from "./mixins";
 
 // Events
 export {
-  MEDIA_EVENTS,
-  MediaAddedEvent,
-  MediaUpdatedEvent,
-  MediaDeletedEvent,
   CollectionClearedEvent,
-  ConversionWillStartEvent,
   ConversionCompletedEvent,
   ConversionFailedEvent,
+  ConversionWillStartEvent,
+  MEDIA_EVENTS,
+  MediaAddedEvent,
+  MediaDeletedEvent,
 } from "./events";
 
 // Interfaces
 export type {
   ConversionConfig,
-  SharpManipulation,
-  MediaCollectionConfig,
   FileInfo,
-  StorageDriver,
-  PathGenerator,
-  UrlGenerator,
   FileNamer,
-  MediaModuleOptions,
   MediaAsyncOptions,
+  MediaCollectionConfig,
+  MediaModuleOptions,
+  PathGenerator,
+  SharpManipulation,
+  StorageDriver,
+  UrlGenerator,
 } from "./interfaces";
 
 // Exceptions
 export {
+  DiskNotConfiguredException,
   FileDoesNotExistException,
   FileIsTooBigException,
   FileUnacceptableException,
   InvalidConversionException,
-  DiskNotConfiguredException,
 } from "./exceptions";
 
 // Generators
-export { DefaultPathGenerator } from "./generators";
-export { DefaultUrlGenerator } from "./generators";
-export { DefaultFileNamer } from "./generators";
+export { DefaultFileNamer, DefaultPathGenerator, DefaultUrlGenerator } from "./generators";
 
 // Storage
-export { DiskManager } from "./storage";
-export { LocalDriver, S3Driver } from "./storage";
-export type { LocalDiskConfig, S3DiskConfig, DiskConfig } from "./storage";
+export { DiskManager, LocalDriver, S3Driver } from "./storage";
+export type { DiskConfig, LocalDiskConfig, S3DiskConfig } from "./storage";
 
 // Helpers
 export {
-  generateUuid,
   detectMimeType,
+  formatBytes,
+  generateUuid,
+  getBaseName,
   getExtension,
   getExtensionFromMime,
-  sanitizeFileName,
-  getBaseName,
-  formatBytes,
   getFileType,
+  sanitizeFileName,
 } from "./helpers";
 
 // Subscriber

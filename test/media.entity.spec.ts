@@ -81,6 +81,36 @@ describe("MediaEntity", () => {
     });
   });
 
+  describe("bigint size transformer", () => {
+    it("should handle size as number", () => {
+      media.size = 1024;
+      expect(media.size).toBe(1024);
+      expect(typeof media.size).toBe("number");
+    });
+
+    it("should produce correct humanReadableSize when size is set as number", () => {
+      media.size = 2048;
+      expect(media.humanReadableSize).toBe("2.00 KB");
+    });
+
+    it("should handle size column transformer (string to number)", () => {
+      // Simulate what TypeORM does when reading bigint from DB as string
+      const columns = require("typeorm").getMetadataArgsStorage().columns;
+      const sizeColumn = columns.find(
+        (c: any) => c.target === MediaEntity && c.propertyName === "size",
+      );
+      expect(sizeColumn).toBeDefined();
+      expect(sizeColumn.options.transformer).toBeDefined();
+
+      const { from, to } = sizeColumn.options.transformer;
+      // from: converts DB value (string) → JS value (number)
+      expect(from("12345")).toBe(12345);
+      expect(from(12345)).toBe(12345);
+      // to: passes through number for writing to DB
+      expect(to(12345)).toBe(12345);
+    });
+  });
+
   describe("computed properties", () => {
     it("should return human readable size", () => {
       media.size = 1024 * 1024;

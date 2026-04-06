@@ -1,15 +1,15 @@
 import { DynamicModule, Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { MediaEntity } from "./entities/media.entity";
-import { MediaService } from "./media.service";
-import { DiskManager } from "./storage/disk-manager";
 import { FileManipulator } from "./file-manipulator";
-import { MediaSubscriber } from "./media.subscriber";
+import { DefaultFileNamer } from "./generators/default-file-namer";
 import { DefaultPathGenerator } from "./generators/default-path-generator";
 import { DefaultUrlGenerator } from "./generators/default-url-generator";
-import { DefaultFileNamer } from "./generators/default-file-namer";
-import { MEDIA_OPTIONS, PATH_GENERATOR, URL_GENERATOR, FILE_NAMER } from "./media.constants";
-import type { MediaModuleOptions, MediaAsyncOptions } from "./interfaces";
+import type { MediaAsyncOptions, MediaModuleOptions } from "./interfaces";
+import { FILE_NAMER, MEDIA_OPTIONS, PATH_GENERATOR, URL_GENERATOR } from "./media.constants";
+import { MediaService } from "./media.service";
+import { MediaSubscriber } from "./media.subscriber";
+import { DiskManager } from "./storage/disk-manager";
 
 @Module({})
 export class MediaModule {
@@ -47,10 +47,7 @@ export class MediaModule {
     return {
       module: MediaModule,
       global: true,
-      imports: [
-        ...(asyncOptions.imports ?? []),
-        TypeOrmModule.forFeature([MediaEntity]),
-      ],
+      imports: [...(asyncOptions.imports ?? []), TypeOrmModule.forFeature([MediaEntity])],
       providers: [
         {
           provide: MEDIA_OPTIONS,
@@ -77,7 +74,15 @@ export class MediaModule {
         FileManipulator,
         {
           provide: URL_GENERATOR,
-          useClass: DefaultUrlGenerator,
+          useFactory: (
+            options: MediaModuleOptions,
+            pathGenerator: any,
+            diskManager: DiskManager,
+          ) => {
+            const Cls = options.urlGenerator ?? DefaultUrlGenerator;
+            return new Cls(options, pathGenerator, diskManager);
+          },
+          inject: [MEDIA_OPTIONS, PATH_GENERATOR, DiskManager],
         },
         MediaService,
         MediaSubscriber,
