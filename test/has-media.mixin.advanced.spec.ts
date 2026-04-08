@@ -89,10 +89,10 @@ describe("HasMediaMixin (with real service)", () => {
     expect(url).toContain("photo.jpg");
   });
 
-  it("should return empty string for getFirstMediaUrl when no media", async () => {
+  it("should return null for getFirstMediaUrl when no media", async () => {
     const post = new TestPost();
     const url = await post.getFirstMediaUrl("nonexistent");
-    expect(url).toBe("");
+    expect(url).toBeNull();
   });
 
   it("should hasMedia via mixin", async () => {

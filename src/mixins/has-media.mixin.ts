@@ -1,8 +1,8 @@
 import "reflect-metadata";
-import { HAS_MEDIA_METADATA_KEY } from "../media.constants";
-import { MediaService } from "../media.service";
 import { MediaEntity } from "../entities/media.entity";
 import { FileAdder } from "../file-adder";
+import { HAS_MEDIA_METADATA_KEY } from "../media.constants";
+import { MediaService } from "../media.service";
 
 type Constructor<T = object> = new (...args: any[]) => T;
 
@@ -12,7 +12,7 @@ export interface HasMediaEntity {
   addMedia(filePathOrBuffer: string | Buffer, fileName?: string): FileAdder;
   getMedia(collectionName?: string): Promise<MediaEntity[]>;
   getFirstMedia(collectionName?: string): Promise<MediaEntity | null>;
-  getFirstMediaUrl(collectionName?: string, conversionName?: string): Promise<string>;
+  getFirstMediaUrl(collectionName?: string, conversionName?: string): Promise<string | null>;
   hasMedia(collectionName?: string): Promise<boolean>;
   clearMediaCollection(collectionName?: string): Promise<void>;
   deleteAllMedia(): Promise<void>;
@@ -78,19 +78,22 @@ export function HasMediaMixin<TBase extends Constructor>(Base: TBase) {
     async getFirstMediaUrl(
       collectionName?: string,
       conversionName?: string,
-    ): Promise<string> {
+    ): Promise<string | null> {
       const service = MediaService.getInstance();
       if (!service) {
         throw new Error(
           "MediaModule has not been initialized. Make sure MediaModule.forRoot() is imported.",
         );
       }
-      const media = await service.getFirstMedia(
-        this.getMediaModelType(),
-        String(this.getMediaModelId()),
-        collectionName,
-      );
-      if (!media) return "";
+      const modelType = this.getMediaModelType();
+      const modelId = String(this.getMediaModelId());
+      const media = await service.getFirstMedia(modelType, modelId, collectionName);
+      if (!media) {
+        if (collectionName) {
+          return service.getFallbackUrl(modelType, collectionName, conversionName);
+        }
+        return null;
+      }
       return service.getUrl(media, conversionName);
     }
 
@@ -129,10 +132,7 @@ export function HasMediaMixin<TBase extends Constructor>(Base: TBase) {
           "MediaModule has not been initialized. Make sure MediaModule.forRoot() is imported.",
         );
       }
-      await service.deleteAllMedia(
-        this.getMediaModelType(),
-        String(this.getMediaModelId()),
-      );
+      await service.deleteAllMedia(this.getMediaModelType(), String(this.getMediaModelId()));
     }
   }
 

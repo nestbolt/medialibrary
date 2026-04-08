@@ -13,8 +13,6 @@ export interface MediaModuleOptions {
   fileNamer?: Type<FileNamer>;
   baseUrl?: string;
   prefix?: string;
-  performConversionsSync?: boolean;
-  tempDirectory?: string;
 }
 
 export interface MediaAsyncOptions {

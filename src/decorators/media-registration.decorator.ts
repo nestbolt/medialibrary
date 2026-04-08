@@ -47,7 +47,17 @@ export function RegisterMediaCollections(
         () => MediaCollectionConfig[]
       >();
     }
-    (globalThis as any).__nestbolt_media_collections.set(modelType, factory);
+    const collectionsRegistry = (globalThis as any).__nestbolt_media_collections as Map<
+      string,
+      () => MediaCollectionConfig[]
+    >;
+    if (collectionsRegistry.has(modelType)) {
+      console.warn(
+        `[MediaLibrary] Overwriting existing media collections registration for "${modelType}". ` +
+          `Ensure each entity has a unique modelType.`,
+      );
+    }
+    collectionsRegistry.set(modelType, factory);
   };
 }
 
@@ -76,6 +86,16 @@ export function RegisterMediaConversions(
         () => ConversionConfig[]
       >();
     }
-    (globalThis as any).__nestbolt_media_conversions.set(modelType, factory);
+    const conversionsRegistry = (globalThis as any).__nestbolt_media_conversions as Map<
+      string,
+      () => ConversionConfig[]
+    >;
+    if (conversionsRegistry.has(modelType)) {
+      console.warn(
+        `[MediaLibrary] Overwriting existing media conversions registration for "${modelType}". ` +
+          `Ensure each entity has a unique modelType.`,
+      );
+    }
+    conversionsRegistry.set(modelType, factory);
   };
 }

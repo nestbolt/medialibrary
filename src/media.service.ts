@@ -168,6 +168,28 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
     return this.urlGenerator.getPath(media, conversionName);
   }
 
+  getFallbackUrl(
+    modelType: string,
+    collectionName: string,
+    conversionName?: string,
+  ): string | null {
+    const config = this.getCollectionConfig(modelType, collectionName);
+    if (!config) return null;
+    const key = conversionName ?? "*";
+    return config.fallbackUrls[key] ?? config.fallbackUrls["*"] ?? null;
+  }
+
+  getFallbackPath(
+    modelType: string,
+    collectionName: string,
+    conversionName?: string,
+  ): string | null {
+    const config = this.getCollectionConfig(modelType, collectionName);
+    if (!config) return null;
+    const key = conversionName ?? "*";
+    return config.fallbackPaths[key] ?? config.fallbackPaths["*"] ?? null;
+  }
+
   async getTemporaryUrl(
     media: MediaEntity,
     expiration: Date,
@@ -407,21 +429,6 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async enforceCollectionSizeLimit(
-    modelType: string,
-    modelId: string,
-    collectionName: string,
-    limit: number,
-  ): Promise<void> {
-    const existing = await this.getMedia(modelType, modelId, collectionName);
-    if (existing.length >= limit) {
-      const toRemove = existing.slice(0, existing.length - limit + 1);
-      for (const media of toRemove) {
-        await this.deleteMedia(media.id);
-      }
-    }
-  }
-
   private async clearMediaCollectionInTransaction(
     manager: EntityManager,
     modelType: string,
@@ -575,7 +582,11 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
 
   private emit(event: string, payload: any): void {
     if (this.eventEmitter) {
-      this.eventEmitter.emit(event, payload);
+      try {
+        this.eventEmitter.emit(event, payload);
+      } catch (error) {
+        this.logger.error(`Failed to emit event "${event}": ${error}`);
+      }
     }
   }
 
@@ -584,10 +595,11 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
     redirectCount = 0,
   ): Promise<{ buffer: Buffer; fileName: string }> {
     const MAX_REDIRECTS = 5;
+    const TIMEOUT_MS = 30_000;
 
     return new Promise((resolve, reject) => {
       const lib = url.startsWith("https") ? https : http;
-      lib
+      const request = lib
         .get(url, (response) => {
           const statusCode = response.statusCode ?? 0;
 
@@ -620,6 +632,11 @@ export class MediaService implements OnModuleInit, OnModuleDestroy {
           response.on("error", reject);
         })
         .on("error", reject);
+
+      request.setTimeout(TIMEOUT_MS, () => {
+        request.destroy();
+        reject(new Error(`Download timed out after ${TIMEOUT_MS}ms: ${url}`));
+      });
     });
   }
 }
