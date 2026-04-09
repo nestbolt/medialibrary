@@ -11,9 +11,7 @@ import { DiskNotConfiguredException } from "../exceptions";
 export class DiskManager {
   private readonly drivers = new Map<string, StorageDriver>();
 
-  constructor(
-    @Inject(MEDIA_OPTIONS) private readonly options: MediaModuleOptions,
-  ) {}
+  constructor(@Inject(MEDIA_OPTIONS) private readonly options: MediaModuleOptions) {}
 
   disk(name?: string): StorageDriver {
     const diskName = name ?? this.options.defaultDisk ?? "local";

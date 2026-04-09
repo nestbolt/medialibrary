@@ -21,7 +21,7 @@ export function getExtensionFromMime(mimeType: string): string {
 
 export function sanitizeFileName(fileName: string): string {
   return fileName
-    .replace(/[^\w\s.\-]/g, "")
+    .replace(/[^\w\s.-]/g, "")
     .replace(/\s+/g, "-")
     .toLowerCase();
 }

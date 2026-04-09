@@ -109,9 +109,12 @@ export class LocalDriver implements StorageDriver {
   }
 
   async temporaryUrl(
-    _path: string,
-    _expiration: Date,
-    _options?: Record<string, any>,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    path: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    expiration: Date,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    options?: Record<string, any>,
   ): Promise<string> {
     throw new Error("Temporary URLs are not supported by the local storage driver.");
   }

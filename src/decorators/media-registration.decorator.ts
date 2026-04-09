@@ -25,6 +25,7 @@ export function clearMediaRegistries(): void {
 export function RegisterMediaCollections(
   registrar: (addCollection: (name: string) => MediaCollectionBuilder) => void,
 ): ClassDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   return (target: Function) => {
     const meta = Reflect.getMetadata(HAS_MEDIA_METADATA_KEY, target);
     const modelType = meta?.modelType ?? target.name;
@@ -64,6 +65,7 @@ export function RegisterMediaCollections(
 export function RegisterMediaConversions(
   registrar: (addConversion: (name: string) => ConversionBuilder) => void,
 ): ClassDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   return (target: Function) => {
     const meta = Reflect.getMetadata(HAS_MEDIA_METADATA_KEY, target);
     const modelType = meta?.modelType ?? target.name;

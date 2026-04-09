@@ -1,10 +1,5 @@
 import "reflect-metadata";
-import {
-  EventSubscriber,
-  EntitySubscriberInterface,
-  RemoveEvent,
-  DataSource,
-} from "typeorm";
+import { EventSubscriber, EntitySubscriberInterface, RemoveEvent, DataSource } from "typeorm";
 import { HAS_MEDIA_METADATA_KEY } from "./media.constants";
 import { MediaService } from "./media.service";
 

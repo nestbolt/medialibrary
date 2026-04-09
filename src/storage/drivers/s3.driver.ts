@@ -22,10 +22,11 @@ export class S3Driver implements StorageDriver {
 
     let S3Client: any;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       S3Client = require("@aws-sdk/client-s3").S3Client;
     } catch {
       throw new Error(
-        '@aws-sdk/client-s3 is required for S3 storage. Install it: pnpm add @aws-sdk/client-s3',
+        "@aws-sdk/client-s3 is required for S3 storage. Install it: pnpm add @aws-sdk/client-s3",
       );
     }
 
@@ -44,6 +45,7 @@ export class S3Driver implements StorageDriver {
   }
 
   private getCommand(name: string): any {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const s3 = require("@aws-sdk/client-s3");
     return s3[name];
   }
@@ -123,9 +125,7 @@ export class S3Driver implements StorageDriver {
         );
       }
 
-      continuationToken = listResponse.IsTruncated
-        ? listResponse.NextContinuationToken
-        : undefined;
+      continuationToken = listResponse.IsTruncated ? listResponse.NextContinuationToken : undefined;
     } while (continuationToken);
   }
 
@@ -184,16 +184,18 @@ export class S3Driver implements StorageDriver {
   async temporaryUrl(
     path: string,
     expiration: Date,
-    _options?: Record<string, any>,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    options?: Record<string, any>,
   ): Promise<string> {
     let getSignedUrl: any;
     let GetObjectCommand: any;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       getSignedUrl = require("@aws-sdk/s3-request-presigner").getSignedUrl;
       GetObjectCommand = this.getCommand("GetObjectCommand");
     } catch {
       throw new Error(
-        '@aws-sdk/s3-request-presigner is required for temporary URLs. Install it: pnpm add @aws-sdk/s3-request-presigner',
+        "@aws-sdk/s3-request-presigner is required for temporary URLs. Install it: pnpm add @aws-sdk/s3-request-presigner",
       );
     }
 

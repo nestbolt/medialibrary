@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { ConversionConfig, SharpManipulation } from "./interfaces/conversion.interface";
+import loadSharp, { type FormatEnum } from "sharp";
 import { getExtensionFromMime } from "./helpers";
+import type { ConversionConfig, SharpManipulation } from "./interfaces/conversion.interface";
 
 @Injectable()
 export class FileManipulator {
@@ -11,14 +12,7 @@ export class FileManipulator {
     conversion: ConversionConfig,
     originalMimeType: string,
   ): Promise<{ buffer: Buffer; mimeType: string; extension: string }> {
-    let sharp: any;
-    try {
-      sharp = require("sharp");
-    } catch {
-      throw new Error("sharp is required for image conversions. Install it: pnpm add sharp");
-    }
-
-    let pipeline = sharp(sourceBuffer);
+    let pipeline = loadSharp(sourceBuffer);
     let outputFormat: string | null = null;
     let outputOptions: Record<string, any> = {};
     let quality: number | null = null;
@@ -44,11 +38,11 @@ export class FileManipulator {
       if (quality != null) {
         outputOptions.quality = quality;
       }
-      pipeline = pipeline.toFormat(outputFormat, outputOptions);
+      pipeline = pipeline.toFormat(outputFormat as keyof FormatEnum, outputOptions);
     } else if (quality != null) {
       const inferredFormat = this.inferFormatFromMime(originalMimeType);
       if (inferredFormat) {
-        pipeline = pipeline.toFormat(inferredFormat, { quality });
+        pipeline = pipeline.toFormat(inferredFormat as keyof FormatEnum, { quality });
       }
     } else if (conversion.keepOriginalImageFormat) {
       // Keep original format — no conversion needed
@@ -56,9 +50,7 @@ export class FileManipulator {
 
     const resultBuffer: Buffer = await pipeline.toBuffer();
 
-    const resultMimeType = outputFormat
-      ? this.formatToMime(outputFormat)
-      : originalMimeType;
+    const resultMimeType = outputFormat ? this.formatToMime(outputFormat) : originalMimeType;
     const resultExtension = outputFormat
       ? outputFormat
       : getExtensionFromMime(originalMimeType) || "bin";
